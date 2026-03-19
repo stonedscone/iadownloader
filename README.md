@@ -22,7 +22,7 @@ No installation needed. Single `.exe`, just run it.
 
 1. Go to archive.org and find the collection you want
 2. Copy the identifier from the URL — it's the part after `/details/`
-   - Example: `https://archive.org/details/dragon-ball-z-episodes` → identifier is `dragon-ball-z-episodes`
+   - Example: `https://archive.org/details/archivestuff` → identifier is `archivestuff`
 3. Paste it into the top field and click **Fetch Files**
 4. Check the files you want to download
 5. Pick a destination folder and click **Start Download**
