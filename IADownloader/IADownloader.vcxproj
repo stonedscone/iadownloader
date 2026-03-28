@@ -135,10 +135,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="fetch.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ui.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="fetch.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="ui.h" />
   </ItemGroup>

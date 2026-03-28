@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <string>
+#include <vector>
+#include <atomic>
 
 // ---------------------------------------------------------------------------
 // Control IDs
@@ -61,3 +63,13 @@ extern HFONT g_fontTitle;
 extern HFONT g_fontNormal;
 extern HFONT g_fontMono;
 extern HBRUSH g_bgBrush;
+
+
+
+// ---------------------------------------------------------------------------
+// Thread state flags
+// ---------------------------------------------------------------------------
+extern std::atomic<bool> g_fetching;
+extern std::atomic<bool> g_downloading;
+extern std::atomic<bool> g_cancelDownload;
+extern std::atomic<bool> g_pauseDownload;
