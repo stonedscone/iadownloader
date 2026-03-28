@@ -202,6 +202,14 @@ void CreateControls(HWND hwnd, HINSTANCE hInstance)
     SendMessage(g_hCancelBtn, WM_SETFONT, (WPARAM)g_fontNormal, TRUE);
     EnableWindow(g_hCancelBtn, FALSE);
 
+    // Pause button
+    g_hPauseBtn = CreateWindowExA(0, "BUTTON", "Pause",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        340, 655, 100, 34,
+        hwnd, (HMENU)IDC_PAUSE_BTN, hInstance, nullptr);
+    SendMessage(g_hPauseBtn, WM_SETFONT, (WPARAM)g_fontNormal, TRUE);
+    EnableWindow(g_hPauseBtn, FALSE);
+
     // Help button
     HWND hHelpBtn = CreateWindowExA(0, "BUTTON", "?",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,

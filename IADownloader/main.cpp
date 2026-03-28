@@ -8,7 +8,7 @@
 
 #include "globals.h"
 #include "fetch.h"
-#include "fetch.h"
+#include "download.h"
 
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -29,6 +29,7 @@ HWND g_hFilterEdit = nullptr;
 HWND g_hDownloadBtn = nullptr;
 HWND g_hCancelBtn = nullptr;
 HWND g_hFetchBtn = nullptr;
+HWND g_hPauseBtn = nullptr;
 
 HFONT  g_fontTitle = nullptr;
 HFONT  g_fontNormal = nullptr;
@@ -44,6 +45,44 @@ std::atomic<bool>       g_fetching{ false };
 std::atomic<bool>       g_downloading{ false };
 std::atomic<bool>       g_cancelDownload{ false };
 std::atomic<bool>       g_pauseDownload{ false };
+
+
+//Helper Func. For Filter
+void ApplyFilter() {
+    char buf[256] = {};
+    GetWindowTextA(g_hFilterEdit, buf, 256);
+    std::string filter(buf);
+    for (auto& c : filter)
+        c = (char)tolower((unsigned char)c);
+
+    // Disable redraw while updating
+    SendMessage(g_hListView, WM_SETREDRAW, FALSE, 0);
+    ListView_DeleteAllItems(g_hListView);
+
+    for (size_t i = 0; i < g_files.size(); i++) {
+        std::string nameLow = g_files[i].name;
+        for (auto& c : nameLow)
+            c = (char)tolower((unsigned char)c);
+
+        if (filter.empty() ||
+            nameLow.find(filter) != std::string::npos) {
+            LVITEMA lvi = {};
+            lvi.mask = LVIF_TEXT | LVIF_PARAM;
+            lvi.iItem = ListView_GetItemCount(g_hListView);
+            lvi.lParam = (LPARAM)i;
+            lvi.pszText = const_cast<LPSTR>(g_files[i].name.c_str());
+            int row = ListView_InsertItem(g_hListView, &lvi);
+            ListView_SetItemText(g_hListView, row, 1,
+                const_cast<LPSTR>(g_files[i].sizeStr.c_str()));
+            ListView_SetCheckState(g_hListView, row, FALSE);
+        }
+    }
+
+    // Re-enable redraw and repaint
+    SendMessage(g_hListView, WM_SETREDRAW, TRUE, 0);
+    RedrawWindow(g_hListView, nullptr, nullptr,
+        RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
 
 
 // Declared in ui.cpp
@@ -78,6 +117,35 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SetTextColor(hdc, CLR_ACCENT);
         static HBRUSH btnBg = CreateSolidBrush(CLR_PANEL);
         return (LRESULT)btnBg;
+    }
+
+    case WM_UPDATE_PROGRESS:
+        SendMessage(g_hProgress, PBM_SETPOS, (WPARAM)wParam, 0);
+        return 0;
+
+    case WM_FILE_DONE:
+        SendMessage(g_hFileProgress, PBM_SETPOS, (WPARAM)wParam, 0);
+        return 0;
+
+    case WM_UPDATE_ETA:
+        SetWindowTextA(g_hEta, (const char*)wParam);
+        return 0;
+
+    case WM_DOWNLOAD_DONE:
+        EnableWindow(g_hDownloadBtn, TRUE);
+        EnableWindow(g_hFetchBtn, TRUE);
+        EnableWindow(g_hCancelBtn, FALSE);
+        EnableWindow(g_hPauseBtn, FALSE);
+        SetWindowTextA(g_hPauseBtn, "Pause");
+        SendMessage(g_hProgress, PBM_SETPOS, 100, 0);
+        return 0;
+    
+    case WM_TIMER: {
+        if (wParam == FILTER_TIMER_ID) {
+            KillTimer(hwnd, FILTER_TIMER_ID);
+            ApplyFilter();
+        }
+        return 0;
     }
 
     case WM_ERASEBKGND: {
@@ -156,7 +224,105 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
+        //----------------------------------------------
+        // Filter Box Function
+        //----------------------------------------------
+        if (id == IDC_FILTER_EDIT && HIWORD(wParam) == EN_CHANGE) {
+            SetTimer(g_hwnd, FILTER_TIMER_ID, FILTER_TIMER_DELAY, nullptr);
+            return 0;
+        }
+
+
+        //----------------------------------------------
+        // Download Button Handler
+        //----------------------------------------------
+        if (id == IDC_DOWNLOAD_BTN) {
+            if (g_downloading || g_fetching) return 0;
+
+            // Collect checked files
+            auto* task = new DownloadTask();
+            int n = ListView_GetItemCount(g_hListView);
+            for (int i = 0; i < n; i++) {
+                if (!ListView_GetCheckState(g_hListView, i)) continue;
+                LVITEMA lvi = {};
+                lvi.mask = LVIF_PARAM;
+                lvi.iItem = i;
+                ListView_GetItem(g_hListView, &lvi);
+                int idx = (int)lvi.lParam;
+                if (idx >= 0 && idx < (int)g_files.size())
+                    task->files.push_back(g_files[idx]);
+            }
+
+            if (task->files.empty()) {
+                SetWindowTextA(g_hStatus,
+                    "No files selected. Check some boxes first.");
+                delete task;
+                return 0;
+            }
+
+            char destBuf[MAX_PATH] = {};
+            GetWindowTextA(g_hDestEdit, destBuf, MAX_PATH);
+            task->destDir = destBuf;
+            if (task->destDir.empty()) {
+                SetWindowTextA(g_hStatus,
+                    "Please select a destination folder.");
+                delete task;
+                return 0;
+            }
+            CreateDirectoryA(task->destDir.c_str(), nullptr);
+
+            EnableWindow(g_hDownloadBtn, FALSE);
+            EnableWindow(g_hCancelBtn, TRUE);
+            EnableWindow(g_hPauseBtn, TRUE);
+            EnableWindow(g_hFetchBtn, FALSE);
+            SendMessage(g_hProgress, PBM_SETPOS, 0, 0);
+            SendMessage(g_hFileProgress, PBM_SETPOS, 0, 0);
+            SetWindowTextA(g_hEta, "");
+
+            std::thread(DownloadThread, task).detach();
+            return 0;
+        }
+        //----------------------------------------------
+
+
+        //Cancel Button
+        if (id == IDC_CANCEL_BTN) {
+            g_cancelDownload = true;
+            EnableWindow(g_hCancelBtn, FALSE);
+            SetWindowTextA(g_hCancelBtn, "Cancelling...");
+            return 0;
+        }
+
+        //Pause Button
+        if (id == IDC_PAUSE_BTN) {
+            if (!g_pauseDownload) {
+                g_pauseDownload = true;
+                SetWindowTextA(g_hPauseBtn, "Resume");
+            }
+            else {
+                g_pauseDownload = false;
+                SetWindowTextA(g_hPauseBtn, "Pause");
+            }
+            return 0;
+        }
+
         return 0;
+    }
+
+    // Make Control+A Work
+    case WM_KEYDOWN: {
+        if (GetKeyState(VK_CONTROL) & 0x8000) {
+            if (wParam == 'A') {
+                HWND focused = GetFocus();
+                if (focused == g_hIdentEdit ||
+                    focused == g_hDestEdit ||
+                    focused == g_hFilterEdit) {
+                    SendMessage(focused, EM_SETSEL, 0, -1);
+                    return 0;
+                }
+            }
+        }
+        break;
     }
 
     case WM_UPDATE_STATUS:
@@ -230,8 +396,22 @@ int WINAPI WinMain(_In_     HINSTANCE hInstance,
 
     MSG msg;
     while (GetMessageA(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageA(&msg);
+        // Make Ctrl+A Freaking Work
+        if (msg.message == WM_KEYDOWN &&
+            (GetKeyState(VK_CONTROL) & 0x8000) &&
+            msg.wParam == 'A') {
+            HWND focused = GetFocus();
+            if (focused == g_hIdentEdit ||
+                focused == g_hDestEdit ||
+                focused == g_hFilterEdit) {
+                SendMessage(focused, EM_SETSEL, 0, -1);
+                continue;
+            }
+        }
+        if (!IsDialogMessageA(g_hwnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }
     }
 
     return 0;

@@ -26,6 +26,9 @@
 #define IDC_FILE_PROGRESS       116
 #define IDC_FILTER_EDIT         119
 #define IDC_HELP_BTN            120
+#define IDC_PAUSE_BTN           121
+#define FILTER_TIMER_ID        1001
+#define FILTER_TIMER_DELAY      300
 
 // ---------------------------------------------------------------------------
 // Colors
@@ -55,6 +58,8 @@ extern HWND g_hFilterEdit;
 extern HWND g_hDownloadBtn;
 extern HWND g_hCancelBtn;
 extern HWND g_hFetchBtn;
+extern HWND g_hPauseBtn;
+
 
 // ---------------------------------------------------------------------------
 // Shared fonts

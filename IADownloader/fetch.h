@@ -7,7 +7,7 @@
 #define WM_FETCH_DONE      (WM_USER + 1)
 #define WM_UPDATE_STATUS   (WM_USER + 2)
 #define WM_UPDATE_PROGRESS (WM_USER + 3)
-
+#define WM_UPDATE_ETA      (WM_USER + 6)
 
 // Represents one file in an archive.org collection
 struct FileEntry {
